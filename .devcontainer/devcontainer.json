@@ -1,0 +1,25 @@
+{
+    "name": "golang dev container",
+    "image": "mcr.microsoft.com/vscode/devcontainers/go:1.16",
+    "postCreateCommand": "go mod download",
+    "settings": {
+        "go.useLanguageServer": true
+    },
+    "extensions": [
+        "streetsidesoftware.code-spell-checker",
+        "eamodio.gitlens",
+        "shardulm94.trailing-spaces",
+        "bobmagicii.autofoldyeah",
+        "vscode-icons-team.vscode-icons",
+        "wayou.vscode-todo-highlight",
+        "coenraads.bracket-pair-colorizer-2",
+        "ms-vsliveshare.vsliveshare",
+        "andyyaldoo.vscode-json",
+        "golang.go",
+        "shardulm94.trailing-spaces"
+    ],
+    "remoteUser": "vscode",
+    "mounts": [
+        "source=/dev,target=/dev,type=bind"
+      ]
+}

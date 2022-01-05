@@ -145,7 +145,7 @@ func (obj *ChipHWHandler) onAuxPinRiseEvent(evt gpiod.LineEvent) {
 	}
 }
 
-func (obj *ChipHWHandler) ReadSerial() (string, error) {
+func (obj *ChipHWHandler) ReadSerial() ([]byte, error) {
 	log.Printf("READ STARTED")
 
 	// read all buffered data, before new read can be performed
@@ -156,14 +156,14 @@ func (obj *ChipHWHandler) ReadSerial() (string, error) {
 	n, err := obj.serialStream.Read(buf)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return "", nil
+			return []byte{}, nil
 		}
 		log.Printf("failed to receive data %s", err.Error())
-		return "", fmt.Errorf("failed to receive data %s", err.Error())
+		return []byte{}, fmt.Errorf("failed to receive data %s", err.Error())
 	}
 	log.Printf("Data Received bytes: %s \n", hex.EncodeToString(buf[:n]))
 	log.Printf("Data Received string: %s\n", string(buf[:n]))
-	return string(buf[:n]), nil
+	return buf[:n], nil
 }
 
 func (obj *ChipHWHandler) WriteSerial(msg []byte) error {
