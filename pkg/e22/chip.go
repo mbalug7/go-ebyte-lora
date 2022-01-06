@@ -46,7 +46,7 @@ func NewChip(hwHanlder *hal.ChipHWHandler) (*Chip, error) {
 			&CryptL{},
 		},
 	}
-	data, err := ch.ReadRegisters(0x00, 0x05)
+	data, err := ch.ReadRegisters(0x00, 0x06)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (obj *Chip) SaveConfig(data []byte) error {
 	return nil
 }
 
-func (obj *Chip) WriteConfigToChip(stagedRegisters [8]Register) error {
+func (obj *Chip) WriteConfigToChip(temporaryConfig bool, stagedRegisters [8]Register, nextChipMode hal.ChipMode) error {
 	err := obj.hw.SetChipMode(hal.ModeSleep)
 	if err != nil {
 		return fmt.Errorf("failed to start config builder %s", err.Error())
@@ -118,7 +118,10 @@ func (obj *Chip) WriteConfigToChip(stagedRegisters [8]Register) error {
 		data = make([]byte, 9)
 		data[2] = 6 // params length
 	}
-	data[0] = 0xC0 //command set register
+	data[0] = 0xC0
+	if temporaryConfig {
+		data[0] = 0xC2
+	}
 	data[1] = 0x00 // start from zero
 
 	for i := 3; i < len(data); i++ {
@@ -137,7 +140,17 @@ func (obj *Chip) WriteConfigToChip(stagedRegisters [8]Register) error {
 	if err != nil {
 		return fmt.Errorf("failed to save chip config to lib model: %s", err.Error())
 	}
-	return obj.updateSerialStreamConfig()
+
+	err = obj.updateSerialStreamConfig()
+	if err != nil {
+		return fmt.Errorf("failed to update serial port config with a new data %s", err.Error())
+	}
+
+	err = obj.hw.SetChipMode(nextChipMode)
+	if err != nil {
+		return fmt.Errorf("failed to set nextchip mode %s", err.Error())
+	}
+	return nil
 }
 
 func (obj *Chip) updateSerialStreamConfig() error {

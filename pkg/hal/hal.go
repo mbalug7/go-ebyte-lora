@@ -23,10 +23,10 @@ const (
 	actionModeSwitch
 )
 
-type chipMode int
+type ChipMode int
 
 const (
-	ModeNormal chipMode = iota
+	ModeNormal ChipMode = iota
 	ModeWakeUp
 	ModePowerSave
 	ModeSleep
@@ -37,7 +37,7 @@ type chipModeLineState struct {
 	m1Value int
 }
 
-var chipModes = map[chipMode]*chipModeLineState{
+var chipModes = map[ChipMode]*chipModeLineState{
 	ModeNormal:    {m0Value: 0, m1Value: 0},
 	ModeWakeUp:    {m0Value: 1, m1Value: 0},
 	ModePowerSave: {m0Value: 0, m1Value: 1},
@@ -65,7 +65,7 @@ type ChipHWHandler struct {
 	modeSwitchDone   chan bool             // channel used to notify mode switcher that switching is done on rising AUX edge
 	muRead           sync.Mutex            // lock reading until previous read is done or timeout
 	muBusy           sync.Mutex            // write, and mode change must be locked until previous write or mode switch operation is done
-	mode             chipMode
+	mode             ChipMode
 }
 
 func NewChipHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip string) (*ChipHWHandler, error) {
@@ -261,7 +261,7 @@ func (obj *ChipHWHandler) WriteSerial(msg []byte) error {
 	return nil
 }
 
-func (obj *ChipHWHandler) SetChipMode(mode chipMode) error {
+func (obj *ChipHWHandler) SetChipMode(mode ChipMode) error {
 	// lock it, another write or mode switch can't happen before this mode switching finishes
 	log.Printf("SETTING MODE %d", mode)
 	if obj.mode == mode {

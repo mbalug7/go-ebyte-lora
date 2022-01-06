@@ -11,80 +11,35 @@ import (
 )
 
 func main() {
-	e32, err := hal.NewChipHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0")
-	if err != nil {
-		log.Fatal(err)
-	}
-	// log.Println("------------- Entering sleep")
-	// err = e32.SetChipMode(hal.ModeSleep)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// err = e32.WriteSerial([]byte{0xC1, 0x00, 0x06})
-	// if err != nil {
-	// 	log.Printf("failed to write bytes %s", err.Error())
-	// }
-	// time.Sleep(200 * time.Millisecond)
-	// data, err := e32.ReadSerial()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	chip, err := e22.NewChip(e32)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// log.Println("-------------- Entering Normal")
-	// err = e32.SetChipMode(hal.ModeNormal)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	cb := e22.NewConfigUpdateBuilder(chip).SerialBaudRate(e22.BAUD_9600)
-	err = cb.Finish()
+	// create chip hardware handler and put chip in sleep mode
+	hw, err := hal.NewChipHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("-------------- Entering Normal")
-	err = e32.SetChipMode(hal.ModeNormal)
+	// create chip handler, read config and update registers model with parameters that are stored on chip
+	chip, err := e22.NewChip(hw)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = e32.WriteSerial([]byte("ASTATUS"))
+
+	// create config builder, set baud rate and the next chip mode
+	// when writing config to chip, chip must be in sleep mode, and after that chip mode will be set to ModeNormal if NextMode is not provided
+	cb := e22.NewConfigUpdateBuilder(chip).SerialBaudRate(e22.BAUD_9600).NextMode(hal.ModeNormal)
+	err = cb.WritePermanentConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = hw.WriteSerial([]byte("ASTATUS"))
 	if err != nil {
 		log.Printf("failed to send data %s", err.Error())
 	}
 
-	// log.Println("------------- Entering sleep")
-	// err = e32.SetChipMode(hal.ModeSleep)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// err = e32.WriteSerial([]byte{0xC1, 0x04, 0x01})
-	// if err != nil {
-	// 	log.Printf("failed to write bytes %s", err.Error())
-	// }
-	// time.Sleep(200 * time.Millisecond)
-	// e32.ReadSerial()
-
-	// log.Println("------------ Entering Normal")
-	// err = e32.SetChipMode(hal.ModeNormal)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// err = e32.WriteSerial([]byte("ASTATUS"))
-	// if err != nil {
-	// 	log.Printf("failed to send data %s", err.Error())
-	// }
-
 	signalInterruptChan := make(chan os.Signal, 1)
 	signal.Notify(signalInterruptChan, os.Interrupt, syscall.SIGTERM)
 	<-signalInterruptChan
-	err = e32.Close()
+	err = hw.Close()
 	if err != nil {
 		log.Printf("failed to close e32 communication: %s", err.Error())
 	}
