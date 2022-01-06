@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/mbalug7/go-ebyte-lora/pkg/e22"
 	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
@@ -16,31 +15,48 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("------------- Entering sleep")
-	err = e32.SetChipMode(hal.ModeSleep)
+	// log.Println("------------- Entering sleep")
+	// err = e32.SetChipMode(hal.ModeSleep)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// err = e32.WriteSerial([]byte{0xC1, 0x00, 0x06})
+	// if err != nil {
+	// 	log.Printf("failed to write bytes %s", err.Error())
+	// }
+	// time.Sleep(200 * time.Millisecond)
+	// data, err := e32.ReadSerial()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	chip, err := e22.NewChip(e32)
 	if err != nil {
 		log.Fatal(err)
 	}
+	// log.Println("-------------- Entering Normal")
+	// err = e32.SetChipMode(hal.ModeNormal)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	err = e32.WriteSerial([]byte{0xC1, 0x00, 0x06})
-	if err != nil {
-		log.Printf("failed to write bytes %s", err.Error())
-	}
-	time.Sleep(200 * time.Millisecond)
-	data, err := e32.ReadSerial()
+	cb := e22.NewConfigUpdateBuilder(chip).SerialBaudRate(e22.BAUD_9600)
+	err = cb.Finish()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	e22Chip := e22.NewChip(e32)
-
-	e22Chip.SetConfig(data)
 
 	log.Println("-------------- Entering Normal")
 	err = e32.SetChipMode(hal.ModeNormal)
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = e32.WriteSerial([]byte("ASTATUS"))
+	if err != nil {
+		log.Printf("failed to send data %s", err.Error())
+	}
+
 	// log.Println("------------- Entering sleep")
 	// err = e32.SetChipMode(hal.ModeSleep)
 	// if err != nil {

@@ -1,80 +1,109 @@
 package e22
 
-import (
-	"fmt"
-	"log"
-	"time"
-
-	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
-)
-
-type Chip struct {
-	registers [8]Register
-	hw        *hal.ChipHWHandler
+type ConfigBuilder struct {
+	chip            *Chip
+	stagedRegisters [8]Register
 }
 
-func NewChip(hwHanlder *hal.ChipHWHandler) *Chip {
-	return &Chip{
-		// ordered array, AddH address is 0, CryptL address is 7
-		hw: hwHanlder,
-		registers: [8]Register{
-			&AddH{},
-			&AddL{},
-			&Reg0{},
-			&Reg1{},
-			&Reg2{},
-			&Reg3{},
-			&CryptH{},
-			&CryptL{},
-		},
+func NewConfigUpdateBuilder(chip *Chip) *ConfigBuilder {
+	return &ConfigBuilder{
+		chip:            chip,
+		stagedRegisters: chip.registers, // copy current values
 	}
 }
 
-func (obj *Chip) GetConfig() (err error) {
-
-	err = obj.hw.SetChipMode(hal.ModeSleep)
-	if err != nil {
-		return fmt.Errorf("failed to set chip mode in get config %s", err.Error())
-	}
-
-	err = obj.hw.WriteSerial([]byte{0xC1, 0x00, 0x06})
-	if err != nil {
-		return fmt.Errorf("failed to write get config bytes %s", err.Error())
-	}
-	time.Sleep(200 * time.Millisecond)
-	data, err := obj.hw.ReadSerial()
-	if err != nil {
-		return fmt.Errorf("failed to read config from serial %s", err.Error())
-	}
-	err = obj.SetConfig(data)
-	if err != nil {
-		return fmt.Errorf("failed to store current chip new config %s", err.Error())
-	}
-	return nil
+func (obj *ConfigBuilder) Address(addressHigh uint8, addressLow uint8) *ConfigBuilder {
+	addressH := obj.stagedRegisters[ADD_H].(*AddH)
+	addressH.address = addressHigh
+	addressL := obj.stagedRegisters[ADD_L].(*AddL)
+	addressL.address = addressLow
+	return obj
 }
 
-func (obj *Chip) SetConfig(conf []byte) error {
-	// we ned at least 3 bytes, cmd, start address, length
-	if len(conf) < 3 {
-		return fmt.Errorf("invalid config")
-	}
-	startAddr := conf[1]
-	length := conf[2]
+// REG0 params
 
-	// cmd, starting address, length, and parameters -> number of parameters must be the same as length
-	// one parameter for one register
-	// e.g. C1 04 01 09 -> (len(conf) is 4) < (3 -> first parameter postion) + (conf[2] is 1 -> we have only one parameter) -> 4 is not < 4
-	if len(conf) < 3+int(length) {
-		return fmt.Errorf("invalid parameters in config")
-	}
-	paramStartPosition := 3
-	for i := startAddr; i < startAddr+length; i++ {
-		obj.registers[i].SetValue(conf[paramStartPosition])
-		paramStartPosition++
-	}
+func (obj *ConfigBuilder) SerialBaudRate(br baudRate) *ConfigBuilder {
+	reg0 := obj.stagedRegisters[REG0].(*Reg0)
+	reg0.baudRate = br
+	return obj
+}
 
-	for ind, reg := range obj.registers {
-		log.Printf("ADDR %d, struct %+v \n", ind, reg)
-	}
-	return nil
+func (obj *ConfigBuilder) SerialParityBit(parityBit parity) *ConfigBuilder {
+	reg0 := obj.stagedRegisters[REG0].(*Reg0)
+	reg0.parityBit = parityBit
+	return obj
+}
+
+func (obj *ConfigBuilder) AirDataRate(adRate airDataRate) *ConfigBuilder {
+	reg0 := obj.stagedRegisters[REG0].(*Reg0)
+	reg0.adRate = adRate
+	return obj
+}
+
+// REG1 params
+
+func (obj *ConfigBuilder) SubPacketLength(subPacketLength subPacket) *ConfigBuilder {
+	reg1 := obj.stagedRegisters[REG1].(*Reg1)
+	reg1.subPacket = subPacketLength
+	return obj
+}
+
+func (obj *ConfigBuilder) RSSIAmbientNoiseState(state rssiAmbientNoise) *ConfigBuilder {
+	reg1 := obj.stagedRegisters[REG1].(*Reg1)
+	reg1.ambientNoiseRSSI = state
+	return obj
+}
+
+func (obj *ConfigBuilder) TransmittingPower(power transmittingPower) *ConfigBuilder {
+	reg1 := obj.stagedRegisters[REG1].(*Reg1)
+	reg1.transmittingPower = power
+	return obj
+}
+
+// REG2 params
+
+// Channel sets chip channel, range 0-80, Actual frequency = 850.125 + CH *1M
+func (obj *ConfigBuilder) Channel(channel uint8) *ConfigBuilder {
+	reg2 := obj.stagedRegisters[REG2].(*Reg2)
+	// set value limits max value to 80 -> chip supports 80 channels
+	reg2.SetValue(channel)
+	return obj
+}
+
+// REG 3
+
+func (obj *ConfigBuilder) RSSIState(state enableRSSI) *ConfigBuilder {
+	reg3 := obj.stagedRegisters[REG3].(*Reg3)
+	reg3.enableRSSI = state
+	return obj
+}
+
+func (obj *ConfigBuilder) TransmissionMethod(method transmissionMethod) *ConfigBuilder {
+	reg3 := obj.stagedRegisters[REG3].(*Reg3)
+	reg3.transmissionMethod = method
+	return obj
+}
+
+func (obj *ConfigBuilder) LBTState(state lbt) *ConfigBuilder {
+	reg3 := obj.stagedRegisters[REG3].(*Reg3)
+	reg3.lbtEnable = state
+	return obj
+}
+
+func (obj *ConfigBuilder) WORCycle(wor worCycle) *ConfigBuilder {
+	reg3 := obj.stagedRegisters[REG3].(*Reg3)
+	reg3.worCycle = wor
+	return obj
+}
+
+func (obj *ConfigBuilder) Crypt(cryptHigh uint8, cryptLow uint8) *ConfigBuilder {
+	cryptH := obj.stagedRegisters[CRYPT_H].(*CryptH)
+	cryptH.value = cryptHigh
+	cryptL := obj.stagedRegisters[CRYPT_L].(*CryptL)
+	cryptL.value = cryptLow
+	return obj
+}
+
+func (obj *ConfigBuilder) Finish() error {
+	return obj.chip.WriteConfigToChip(obj.stagedRegisters)
 }

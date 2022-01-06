@@ -44,7 +44,16 @@ var chipModes = map[chipMode]*chipModeLineState{
 	ModeSleep:     {m0Value: 1, m1Value: 1},
 }
 
+type serialPortData struct {
+	serialBaud            int
+	serialParityBit       serial.Parity
+	serialBaudStaged      int
+	serialParityBitStaged serial.Parity
+}
+
 type ChipHWHandler struct {
+	tty              string
+	serialPortData   *serialPortData
 	M0Line           *gpiod.Line
 	M1Line           *gpiod.Line
 	AUXLine          *gpiod.Line
@@ -56,18 +65,27 @@ type ChipHWHandler struct {
 	modeSwitchDone   chan bool             // channel used to notify mode switcher that switching is done on rising AUX edge
 	muRead           sync.Mutex            // lock reading until previous read is done or timeout
 	muBusy           sync.Mutex            // write, and mode change must be locked until previous write or mode switch operation is done
+	mode             chipMode
 }
 
 func NewChipHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip string) (*ChipHWHandler, error) {
 	e32 := &ChipHWHandler{
+		tty: ttyName,
+		serialPortData: &serialPortData{
+			serialBaud:            9600,
+			serialParityBit:       serial.ParityNone,
+			serialBaudStaged:      9600,
+			serialParityBitStaged: serial.ParityNone,
+		},
 		auxBusyWaitGroup: make(map[string]chan error),
 		writeDone:        make(chan bool, 1),
 		modeSwitchDone:   make(chan bool, 1),
 		auxAction:        actionPowerReset,
+		mode:             ModeSleep,
 	}
 	config := &serial.Config{
 		Name:        ttyName,
-		Baud:        9600,
+		Baud:        e32.serialPortData.serialBaud,
 		Size:        8,
 		ReadTimeout: 2 * time.Second,
 	}
@@ -82,12 +100,12 @@ func NewChipHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip
 		return nil, fmt.Errorf("failed to request AUX GPIO line %s", err.Error())
 	}
 
-	e32.M0Line, err = c.RequestLine(M0Pin, gpiod.AsOutput(0))
+	e32.M0Line, err = c.RequestLine(M0Pin, gpiod.AsOutput(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to request M0 GPIO line %s", err.Error())
 	}
 
-	e32.M1Line, err = c.RequestLine(M1Pin, gpiod.AsOutput(0))
+	e32.M1Line, err = c.RequestLine(M1Pin, gpiod.AsOutput(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to request M1 GPIO line %s", err.Error())
 	}
@@ -118,6 +136,53 @@ func (obj *ChipHWHandler) Close() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to close serial stream %s", err)
 	}
+	return nil
+}
+
+func (obj *ChipHWHandler) StageSerialPortConfig(baudRate int, parityBit serial.Parity) {
+	obj.serialPortData.serialBaudStaged = baudRate
+	obj.serialPortData.serialParityBitStaged = parityBit
+}
+
+func (obj *ChipHWHandler) updateSerialConfig(serialPortData *serialPortData) (err error) {
+
+	// if the same values are staged, ignore
+	if serialPortData.serialBaud == serialPortData.serialBaudStaged &&
+		serialPortData.serialParityBit == serialPortData.serialParityBitStaged {
+		return nil
+	}
+
+	log.Printf("UPDATING SERIAL CFG %d, %d", serialPortData.serialBaudStaged, serialPortData.serialParityBitStaged)
+
+	// lock all RW operations until this is finished
+	obj.muRead.Lock()
+	defer obj.muRead.Unlock()
+
+	if obj.serialStream != nil {
+		err := obj.serialStream.Flush()
+		if err != nil {
+			return fmt.Errorf("failed to flush serial stream %s", err)
+		}
+		err = obj.serialStream.Close()
+		if err != nil {
+			return fmt.Errorf("failed to close serial stream %s", err)
+		}
+	}
+
+	config := &serial.Config{
+		Name:        obj.tty,
+		Baud:        serialPortData.serialBaudStaged,
+		Size:        8,
+		ReadTimeout: 2 * time.Second,
+		Parity:      serialPortData.serialParityBitStaged,
+	}
+	obj.serialStream, err = serial.OpenPort(config)
+	if err != nil {
+		return fmt.Errorf("failed to open serial port, err: %s", err.Error())
+	}
+	serialPortData.serialBaud = serialPortData.serialBaudStaged
+	serialPortData.serialParityBit = serialPortData.serialParityBitStaged
+	log.Printf("UPDATING SERIAL CFG DONE \n")
 	return nil
 }
 
@@ -176,7 +241,7 @@ func (obj *ChipHWHandler) WriteSerial(msg []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to check AUX pin input state: %s", err.Error())
 	}
-	log.Printf("writing string %v", msg)
+	log.Printf("writing string %s", hex.EncodeToString(msg))
 
 	obj.setAuxAction(actionWrite)
 
@@ -198,6 +263,10 @@ func (obj *ChipHWHandler) WriteSerial(msg []byte) error {
 
 func (obj *ChipHWHandler) SetChipMode(mode chipMode) error {
 	// lock it, another write or mode switch can't happen before this mode switching finishes
+	log.Printf("SETTING MODE %d", mode)
+	if obj.mode == mode {
+		return nil
+	}
 	obj.muBusy.Lock()
 	defer obj.muBusy.Unlock()
 	chipMode, ok := chipModes[mode]
@@ -205,6 +274,22 @@ func (obj *ChipHWHandler) SetChipMode(mode chipMode) error {
 		return fmt.Errorf("failed to set unsupported chip mode: %d", mode)
 	}
 
+	if mode == ModeSleep {
+		err := obj.updateSerialConfig(&serialPortData{
+			serialBaud:            obj.serialPortData.serialBaud,
+			serialParityBit:       obj.serialPortData.serialParityBit,
+			serialBaudStaged:      9600,
+			serialParityBitStaged: serial.ParityNone,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to setup serial port params for sleep mode, err: %s", err.Error())
+		}
+	} else {
+		err := obj.updateSerialConfig(obj.serialPortData)
+		if err != nil {
+			return fmt.Errorf("failed to setup serial port params for sleep mode, err: %s", err.Error())
+		}
+	}
 	// check if module is busy, wait for previous action to finish
 	err := obj.registerAndWaitAUXDone()
 	if err != nil {
@@ -229,6 +314,7 @@ func (obj *ChipHWHandler) SetChipMode(mode chipMode) error {
 		return fmt.Errorf("failed to switch chip mode, timeout ocurred")
 	case <-obj.modeSwitchDone:
 	}
+	obj.mode = mode
 	// documentation says that the mode switching is not completed on raising edge. It needs 2 ms.
 	// waiting 200 just to be sure
 	time.Sleep(200 * time.Millisecond)

@@ -241,6 +241,7 @@ func (obj *Reg3) SetValue(value uint8) {
 // CRYPT_H specification
 
 type CryptH struct {
+	value uint8
 }
 
 func (obj *CryptH) GetAddress() address {
@@ -252,12 +253,13 @@ func (obj *CryptH) GetValue() uint8 {
 }
 
 func (obj *CryptH) SetValue(value uint8) {
-
+	obj.value = value
 }
 
 // CRYPT_L specification
 
 type CryptL struct {
+	value uint8
 }
 
 func (obj *CryptL) GetAddress() address {
@@ -269,5 +271,5 @@ func (obj *CryptL) GetValue() uint8 {
 }
 
 func (obj *CryptL) SetValue(value uint8) {
-
+	obj.value = value
 }
