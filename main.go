@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/hex"
+	"errors"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -10,9 +13,21 @@ import (
 	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
 )
 
+func messageEvent(msg []byte, err error) {
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		log.Printf("message event error: %s", err)
+		return
+	}
+	log.Printf("NEW MSG RECEIVED STRING: %s", hex.EncodeToString(msg))
+	log.Printf("NEW MSG RECEIVED STRING: %s", string(msg))
+}
+
 func main() {
 	// create chip hardware handler and put chip in sleep mode
-	hw, err := hal.NewChipHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0")
+	hw, err := hal.NewCommonHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0", messageEvent)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -25,15 +40,16 @@ func main() {
 
 	// create config builder, set baud rate and the next chip mode
 	// when writing config to chip, chip must be in sleep mode, and after that chip mode will be set to ModeNormal if NextMode is not provided
-	cb := e22.NewConfigUpdateBuilder(chip).SerialBaudRate(e22.BAUD_9600).NextMode(hal.ModeNormal)
+
+	cb := e22.NewConfigUpdateBuilder(chip).RSSIState(e22.RSSI_ENABLE).NextMode(hal.ModeNormal)
 	err = cb.WritePermanentConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = hw.WriteSerial([]byte("ASTATUS"))
+	err = chip.SendMessage("ASTATUS")
 	if err != nil {
-		log.Printf("failed to send data %s", err.Error())
+		log.Printf("failed to send data: %s", err.Error())
 	}
 
 	signalInterruptChan := make(chan os.Signal, 1)

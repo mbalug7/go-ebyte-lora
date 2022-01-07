@@ -4,7 +4,7 @@ import "github.com/mbalug7/go-ebyte-lora/pkg/hal"
 
 type ConfigBuilder struct {
 	chip            *Chip
-	stagedRegisters [8]Register
+	stagedRegisters registersCollection
 	nextChipMode    hal.ChipMode
 }
 

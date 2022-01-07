@@ -1,15 +1,24 @@
 package e22
 
-type Register interface {
-	GetAddress() address
-	GetValue() uint8
-	SetValue(value uint8)
+import "github.com/mbalug7/go-ebyte-lora/pkg/hal"
+
+type registersCollection [8]hal.Register
+
+func newRegistersCollection() registersCollection {
+	return registersCollection{
+		&AddH{},
+		&AddL{},
+		&Reg0{},
+		&Reg1{},
+		&Reg2{},
+		&Reg3{},
+		&CryptH{},
+		&CryptL{},
+	}
 }
 
-type address uint8
-
 const (
-	ADD_H address = iota
+	ADD_H hal.RegAddress = iota
 	ADD_L
 	REG0
 	REG1
@@ -25,7 +34,7 @@ type AddH struct {
 	address uint8
 }
 
-func (obj *AddH) GetAddress() address {
+func (obj *AddH) GetAddress() hal.RegAddress {
 	return ADD_H
 }
 
@@ -43,7 +52,7 @@ type AddL struct {
 	address uint8
 }
 
-func (obj *AddL) GetAddress() address {
+func (obj *AddL) GetAddress() hal.RegAddress {
 	return ADD_L
 }
 
@@ -97,7 +106,7 @@ type Reg0 struct {
 	adRate    airDataRate
 }
 
-func (obj *Reg0) GetAddress() address {
+func (obj *Reg0) GetAddress() hal.RegAddress {
 	return REG0
 }
 
@@ -144,7 +153,7 @@ type Reg1 struct {
 	transmittingPower transmittingPower
 }
 
-func (obj *Reg1) GetAddress() address {
+func (obj *Reg1) GetAddress() hal.RegAddress {
 	return REG1
 }
 
@@ -165,7 +174,7 @@ type Reg2 struct {
 	channel uint8 // 0-80 channels
 }
 
-func (obj *Reg2) GetAddress() address {
+func (obj *Reg2) GetAddress() hal.RegAddress {
 	return REG2
 }
 
@@ -223,7 +232,7 @@ type Reg3 struct {
 	worCycle           worCycle
 }
 
-func (obj *Reg3) GetAddress() address {
+func (obj *Reg3) GetAddress() hal.RegAddress {
 	return REG3
 }
 
@@ -244,7 +253,7 @@ type CryptH struct {
 	value uint8
 }
 
-func (obj *CryptH) GetAddress() address {
+func (obj *CryptH) GetAddress() hal.RegAddress {
 	return CRYPT_H
 }
 
@@ -262,7 +271,7 @@ type CryptL struct {
 	value uint8
 }
 
-func (obj *CryptL) GetAddress() address {
+func (obj *CryptL) GetAddress() hal.RegAddress {
 	return CRYPT_L
 }
 

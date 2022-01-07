@@ -27,26 +27,17 @@ var serialParityMap = map[parity]serial.Parity{
 }
 
 type Chip struct {
-	registers [8]Register
-	hw        *hal.ChipHWHandler
+	registers registersCollection
+	hw        hal.HWHandler
 }
 
-func NewChip(hwHanlder *hal.ChipHWHandler) (*Chip, error) {
+func NewChip(gpioHandler hal.HWHandler) (*Chip, error) {
 	ch := &Chip{
 		// ordered array, AddH address is 0, CryptL address is 7
-		hw: hwHanlder,
-		registers: [8]Register{
-			&AddH{},
-			&AddL{},
-			&Reg0{},
-			&Reg1{},
-			&Reg2{},
-			&Reg3{},
-			&CryptH{},
-			&CryptL{},
-		},
+		hw:        gpioHandler,
+		registers: newRegistersCollection(),
 	}
-	data, err := ch.ReadRegisters(0x00, 0x06)
+	data, err := ch.ReadChipRegisters(0x00, 0x06)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +49,7 @@ func NewChip(hwHanlder *hal.ChipHWHandler) (*Chip, error) {
 	return ch, err
 }
 
-func (obj *Chip) ReadRegisters(startingAddress uint8, length uint8) (data []byte, err error) {
+func (obj *Chip) ReadChipRegisters(startingAddress uint8, length uint8) (data []byte, err error) {
 
 	err = obj.hw.SetChipMode(hal.ModeSleep)
 	if err != nil {
@@ -74,7 +65,6 @@ func (obj *Chip) ReadRegisters(startingAddress uint8, length uint8) (data []byte
 	if err != nil {
 		return data, fmt.Errorf("failed to read config from serial %s", err.Error())
 	}
-
 	return
 }
 
@@ -104,7 +94,7 @@ func (obj *Chip) SaveConfig(data []byte) error {
 	return nil
 }
 
-func (obj *Chip) WriteConfigToChip(temporaryConfig bool, stagedRegisters [8]Register, nextChipMode hal.ChipMode) error {
+func (obj *Chip) WriteConfigToChip(temporaryConfig bool, stagedRegisters registersCollection, nextChipMode hal.ChipMode) error {
 	err := obj.hw.SetChipMode(hal.ModeSleep)
 	if err != nil {
 		return fmt.Errorf("failed to start config builder %s", err.Error())
@@ -149,6 +139,21 @@ func (obj *Chip) WriteConfigToChip(temporaryConfig bool, stagedRegisters [8]Regi
 	err = obj.hw.SetChipMode(nextChipMode)
 	if err != nil {
 		return fmt.Errorf("failed to set nextchip mode %s", err.Error())
+	}
+	return nil
+}
+
+func (obj *Chip) SendMessage(message string) error {
+	currentMode, err := obj.hw.GetChipMode()
+	if err != nil {
+		return err
+	}
+	if currentMode == hal.ModeSleep || currentMode == hal.ModePowerSave {
+		return fmt.Errorf("can't send message while chip is in mode %d. Change mode to ModeNormal or ModeWakeUp", currentMode)
+	}
+	err = obj.hw.WriteSerial([]byte(message))
+	if err != nil {
+		return fmt.Errorf("failed to write config to the chip: %s", err.Error())
 	}
 	return nil
 }
