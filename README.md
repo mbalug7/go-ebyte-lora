@@ -1,5 +1,5 @@
 # go-ebyte-lora
-EBYTE Lora modules interface library for Linux, Raspberry PI
+EBYTE E22 (for now) interface library for Linux, Raspberry PI, written in Go. 
 
 Experimental phase
 
