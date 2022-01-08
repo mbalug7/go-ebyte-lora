@@ -1,18 +1,14 @@
 package e22
 
-import "github.com/mbalug7/go-ebyte-lora/pkg/hal"
-
 type ConfigBuilder struct {
 	chip            *Chip
 	stagedRegisters registersCollection
-	nextChipMode    hal.ChipMode
 }
 
 func NewConfigUpdateBuilder(chip *Chip) *ConfigBuilder {
 	return &ConfigBuilder{
 		chip:            chip,
-		stagedRegisters: chip.registers, // copy current values
-		nextChipMode:    hal.ModeNormal,
+		stagedRegisters: chip.registers.Copy(), // copy current values
 	}
 }
 
@@ -108,15 +104,10 @@ func (obj *ConfigBuilder) Crypt(cryptHigh uint8, cryptLow uint8) *ConfigBuilder 
 	return obj
 }
 
-func (obj *ConfigBuilder) NextMode(mode hal.ChipMode) *ConfigBuilder {
-	obj.nextChipMode = mode
-	return obj
-}
-
 func (obj *ConfigBuilder) WritePermanentConfig() error {
-	return obj.chip.WriteConfigToChip(false, obj.stagedRegisters, obj.nextChipMode)
+	return obj.chip.WriteConfigToChip(false, obj.stagedRegisters)
 }
 
 func (obj *ConfigBuilder) WriteTemporaryConfig() error {
-	return obj.chip.WriteConfigToChip(true, obj.stagedRegisters, obj.nextChipMode)
+	return obj.chip.WriteConfigToChip(true, obj.stagedRegisters)
 }

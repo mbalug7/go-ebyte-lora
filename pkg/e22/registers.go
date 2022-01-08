@@ -1,8 +1,31 @@
 package e22
 
-import "github.com/mbalug7/go-ebyte-lora/pkg/hal"
+import (
+	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
+)
 
 type registersCollection [8]hal.Register
+
+func (obj registersCollection) EqualTo(c registersCollection) bool {
+	if len(obj) != len(c) {
+		return false
+	}
+	for i, reg := range obj {
+		if reg.GetValue() != c[i].GetValue() {
+			return false
+		}
+	}
+	return true
+}
+
+func (obj registersCollection) Copy() registersCollection {
+	newCollection := newRegistersCollection()
+
+	for i, reg := range obj {
+		newCollection[i].SetValue(reg.GetValue())
+	}
+	return newCollection
+}
 
 func newRegistersCollection() registersCollection {
 	return registersCollection{

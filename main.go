@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
-	"errors"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -13,43 +10,42 @@ import (
 	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
 )
 
-func messageEvent(msg []byte, err error) {
+func messageEvent(msg e22.Message, err error) {
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return
-		}
 		log.Printf("message event error: %s", err)
 		return
 	}
-	log.Printf("NEW MSG RECEIVED STRING: %s", hex.EncodeToString(msg))
-	log.Printf("NEW MSG RECEIVED STRING: %s", string(msg))
+	log.Printf("NEW MSG DATA: %s", string(msg.Payload))
+	log.Printf("NEW MSG RSSI [%d] dBm", msg.RSSI)
 }
 
 func main() {
 	// create chip hardware handler and put chip in sleep mode
-	hw, err := hal.NewCommonHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0", messageEvent)
+	hw, err := hal.NewCommonHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// create chip handler, read config and update registers model with parameters that are stored on chip
-	chip, err := e22.NewChip(hw)
+	chip, err := e22.NewChip(hw, messageEvent)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// create config builder, set baud rate and the next chip mode
-	// when writing config to chip, chip must be in sleep mode, and after that chip mode will be set to ModeNormal if NextMode is not provided
+	hw.SetChipMode(hal.ModeNormal)
 
-	cb := e22.NewConfigUpdateBuilder(chip).RSSIState(e22.RSSI_ENABLE).NextMode(hal.ModeNormal)
+	log.Println(chip.GetModuleConfiguration())
+
+	// enable RSSI info in message, otherwise RSSI will be set to 0
+	cb := e22.NewConfigUpdateBuilder(chip).RSSIState(e22.RSSI_ENABLE)
 	err = cb.WritePermanentConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("config write error: %s", err)
 	}
 
 	err = chip.SendMessage("ASTATUS")
 	if err != nil {
-		log.Printf("failed to send data: %s", err.Error())
+		log.Printf("failed to send data: %s", err)
 	}
 
 	signalInterruptChan := make(chan os.Signal, 1)
@@ -57,7 +53,7 @@ func main() {
 	<-signalInterruptChan
 	err = hw.Close()
 	if err != nil {
-		log.Printf("failed to close e32 communication: %s", err.Error())
+		log.Printf("failed to close e32 communication: %s", err)
 	}
 
 }

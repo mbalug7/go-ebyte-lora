@@ -19,4 +19,5 @@ type HWHandler interface {
 	StageSerialPortConfig(baudRate int, parityBit serial.Parity)
 	SetChipMode(mode ChipMode) error
 	GetChipMode() (ChipMode, error)
+	RegisterOnMessageCb(OnMessageCb) error
 }
