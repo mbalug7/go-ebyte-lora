@@ -28,7 +28,7 @@ EBYTE E22 chip family should be fully supported by this library.
 * Library is tested on E220-900T30D module, and the module documentation can be found here:
   * https://www.ebyte.com/en/downpdf.aspx?id=1214
 
-```
+```Go
 package main
 
 import (
