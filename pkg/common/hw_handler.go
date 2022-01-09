@@ -1,19 +1,19 @@
-package hal
+package common
 
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mazen160/go-random"
+	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
 	"github.com/tarm/serial"
 	"github.com/warthog618/gpiod"
 )
 
-type auxAction int
-
 const (
-	actionPowerReset auxAction = iota
+	actionPowerReset int32 = iota
 	actionRead
 	actionWrite
 	actionModeSwitch
@@ -24,11 +24,11 @@ type chipModeLineState struct {
 	m1Value int
 }
 
-var chipModes = map[ChipMode]*chipModeLineState{
-	ModeNormal:    {m0Value: 0, m1Value: 0},
-	ModeWakeUp:    {m0Value: 1, m1Value: 0},
-	ModePowerSave: {m0Value: 0, m1Value: 1},
-	ModeSleep:     {m0Value: 1, m1Value: 1},
+var chipModes = map[hal.ChipMode]*chipModeLineState{
+	hal.ModeNormal:    {m0Value: 0, m1Value: 0},
+	hal.ModeWakeUp:    {m0Value: 1, m1Value: 0},
+	hal.ModePowerSave: {m0Value: 0, m1Value: 1},
+	hal.ModeSleep:     {m0Value: 1, m1Value: 1},
 }
 
 type serialPortData struct {
@@ -38,25 +38,25 @@ type serialPortData struct {
 	serialParityBitStaged serial.Parity
 }
 
-type CommonHWHandler struct {
-	tty              string
-	serialPortData   *serialPortData
-	M0Line           *gpiod.Line
-	M1Line           *gpiod.Line
-	AUXLine          *gpiod.Line
-	serialStream     *serial.Port
-	auxAction        auxAction
-	muAuxBusyWgMap   sync.Mutex            // map protection mutex
+type HWHandler struct {
+	tty              string                // serial port name
+	serialPortData   *serialPortData       // serial port config data
+	M0Line           *gpiod.Line           // M0 GPIO Pin
+	M1Line           *gpiod.Line           // M1 GPIO Pin
+	AUXLine          *gpiod.Line           // AUX GPIO Pin
+	serialStream     *serial.Port          // serial port needed communicate with the module
+	auxAction        int32                 // action that will be executed on rising edge of AUX pin
 	auxBusyWaitGroup map[string]chan error // holds channels that wait for raising AUX edge
 	writeDone        chan bool             // channel used to notify writer that writing is done on rising AUX edge
 	modeSwitchDone   chan bool             // channel used to notify mode switcher that switching is done on rising AUX edge
+	muAuxDone        sync.Mutex            // map protection mutex
 	muRead           sync.Mutex            // lock reading until previous read is done or timeout
 	muBusy           sync.Mutex            // write, and mode change must be locked until previous write or mode switch operation is done
-	onMsgCb          OnMessageCb
+	onMsgCb          hal.OnMessageCb
 }
 
-func NewCommonHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip string) (*CommonHWHandler, error) {
-	e32 := &CommonHWHandler{
+func NewHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip string) (*HWHandler, error) {
+	handler := &HWHandler{
 		tty: ttyName,
 		serialPortData: &serialPortData{
 			serialBaud:            9600,
@@ -71,40 +71,40 @@ func NewCommonHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioCh
 	}
 	config := &serial.Config{
 		Name:        ttyName,
-		Baud:        e32.serialPortData.serialBaud,
+		Baud:        handler.serialPortData.serialBaud,
 		Size:        8,
 		ReadTimeout: 2 * time.Second,
 	}
 	var err error
-	c, err := gpiod.NewChip(gpioChip, gpiod.WithConsumer("glora32"))
+	c, err := gpiod.NewChip(gpioChip, gpiod.WithConsumer("ebyte-module"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GPIO chip: %w", err)
 	}
 
-	e32.AUXLine, err = c.RequestLine(AUXPin, gpiod.WithEventHandler(e32.onAuxPinRiseEvent), gpiod.WithRisingEdge)
+	handler.AUXLine, err = c.RequestLine(AUXPin, gpiod.WithEventHandler(handler.onAuxPinRiseEvent), gpiod.WithRisingEdge)
 	if err != nil {
 		return nil, fmt.Errorf("failed to request AUX GPIO line: %w", err)
 	}
 
-	e32.M0Line, err = c.RequestLine(M0Pin, gpiod.AsOutput(1))
+	handler.M0Line, err = c.RequestLine(M0Pin, gpiod.AsOutput(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to request M0 GPIO line: %w", err)
 	}
 
-	e32.M1Line, err = c.RequestLine(M1Pin, gpiod.AsOutput(1))
+	handler.M1Line, err = c.RequestLine(M1Pin, gpiod.AsOutput(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to request M1 GPIO line: %w", err)
 	}
-	e32.serialStream, err = serial.OpenPort(config)
+	handler.serialStream, err = serial.OpenPort(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open serial port, err: %w", err)
 	}
 	time.Sleep(200 * time.Millisecond)
-	e32.setAuxAction(actionRead)
-	return e32, nil
+	handler.setAuxAction(actionRead)
+	return handler, nil
 }
 
-func (obj *CommonHWHandler) Close() (err error) {
+func (obj *HWHandler) Close() (err error) {
 	err = obj.M0Line.Close()
 	if err != nil {
 		return fmt.Errorf("failed to close M0 line: %w", err)
@@ -125,7 +125,7 @@ func (obj *CommonHWHandler) Close() (err error) {
 	return nil
 }
 
-func (obj *CommonHWHandler) RegisterOnMessageCb(cb OnMessageCb) error {
+func (obj *HWHandler) RegisterOnMessageCb(cb hal.OnMessageCb) error {
 	if obj.onMsgCb != nil {
 		return fmt.Errorf("on message callback already registered")
 	}
@@ -133,12 +133,12 @@ func (obj *CommonHWHandler) RegisterOnMessageCb(cb OnMessageCb) error {
 	return nil
 }
 
-func (obj *CommonHWHandler) StageSerialPortConfig(baudRate int, parityBit serial.Parity) {
+func (obj *HWHandler) StageSerialPortConfig(baudRate int, parityBit serial.Parity) {
 	obj.serialPortData.serialBaudStaged = baudRate
 	obj.serialPortData.serialParityBitStaged = parityBit
 }
 
-func (obj *CommonHWHandler) updateSerialConfig(serialPortData *serialPortData) (err error) {
+func (obj *HWHandler) updateSerialConfig(serialPortData *serialPortData) (err error) {
 
 	// ignore updating if current and next config is the same
 	if serialPortData.serialBaud == serialPortData.serialBaudStaged &&
@@ -177,31 +177,32 @@ func (obj *CommonHWHandler) updateSerialConfig(serialPortData *serialPortData) (
 	return nil
 }
 
-func (obj *CommonHWHandler) onAuxPinRiseEvent(evt gpiod.LineEvent) {
+func (obj *HWHandler) onAuxPinRiseEvent(evt gpiod.LineEvent) {
 	// there is a case when we want to write something to serial or switch chip mode, but the module is busy with reading
 	// on aux rising edge, module is not busy, and operations that wait can be executed
 	defer obj.auxDoneNotifyReceivers()
 
-	if obj.auxAction == actionModeSwitch {
+	currentAction := atomic.LoadInt32(&obj.auxAction)
+	if currentAction == actionModeSwitch {
 		obj.setAuxAction(actionRead)
 		obj.modeSwitchDone <- true
 		return
 	}
-	if obj.auxAction == actionWrite {
+	if currentAction == actionWrite {
 		obj.setAuxAction(actionRead)
 		obj.writeDone <- true
 		return
 	}
-	if obj.auxAction == actionRead {
+	if currentAction == actionRead {
 		data, err := obj.ReadSerial()
-		if obj.onMsgCb != nil {
+		if obj.onMsgCb != nil && len(data) > 0 {
 			obj.onMsgCb(data, err)
 		}
 		return
 	}
 }
 
-func (obj *CommonHWHandler) ReadSerial() ([]byte, error) {
+func (obj *HWHandler) ReadSerial() ([]byte, error) {
 	// read all buffered data, before new read can be performed
 	obj.muRead.Lock()
 	defer obj.muRead.Unlock()
@@ -214,7 +215,7 @@ func (obj *CommonHWHandler) ReadSerial() ([]byte, error) {
 	return buf[:n], nil
 }
 
-func (obj *CommonHWHandler) WriteSerial(msg []byte) error {
+func (obj *HWHandler) WriteSerial(msg []byte) error {
 	// lock it, another write or mode switch can't happen before this writing finishes
 	obj.muBusy.Lock()
 	defer obj.muBusy.Unlock()
@@ -242,9 +243,9 @@ func (obj *CommonHWHandler) WriteSerial(msg []byte) error {
 	return nil
 }
 
-func (obj *CommonHWHandler) SetChipMode(mode ChipMode) error {
+func (obj *HWHandler) SetMode(mode hal.ChipMode) error {
 	// lock it, another write or mode switch can't happen before this mode switching finishes
-	currentMode, err := obj.GetChipMode()
+	currentMode, err := obj.GetMode()
 	if err != nil {
 		return err
 	}
@@ -258,7 +259,7 @@ func (obj *CommonHWHandler) SetChipMode(mode ChipMode) error {
 		return fmt.Errorf("failed to set unsupported chip mode: %d", mode)
 	}
 
-	if mode == ModeSleep {
+	if mode == hal.ModeSleep {
 		err := obj.updateSerialConfig(&serialPortData{
 			serialBaud:            obj.serialPortData.serialBaud,
 			serialParityBit:       obj.serialPortData.serialParityBit,
@@ -304,9 +305,9 @@ func (obj *CommonHWHandler) SetChipMode(mode ChipMode) error {
 	return nil
 }
 
-func (obj *CommonHWHandler) auxDoneNotifyReceivers() {
-	obj.muAuxBusyWgMap.Lock()
-	defer obj.muAuxBusyWgMap.Unlock()
+func (obj *HWHandler) auxDoneNotifyReceivers() {
+	obj.muAuxDone.Lock()
+	defer obj.muAuxDone.Unlock()
 	for id, ch := range obj.auxBusyWaitGroup {
 		ch <- nil
 		close(ch)
@@ -315,7 +316,7 @@ func (obj *CommonHWHandler) auxDoneNotifyReceivers() {
 
 }
 
-func (obj *CommonHWHandler) registerAndWaitAUXDone() error {
+func (obj *HWHandler) registerAndWaitAUXDone() error {
 	val, err := obj.AUXLine.Value()
 	if err != nil {
 		return err
@@ -329,9 +330,9 @@ func (obj *CommonHWHandler) registerAndWaitAUXDone() error {
 	if err != nil {
 		return fmt.Errorf("failed to generate random id: %w", err)
 	}
-	obj.muAuxBusyWgMap.Lock()
+	obj.muAuxDone.Lock()
 	obj.auxBusyWaitGroup[id] = ch
-	obj.muAuxBusyWgMap.Unlock()
+	obj.muAuxDone.Unlock()
 	select {
 	case <-time.After(2 * time.Second):
 		return fmt.Errorf("aux free checking timeouted")
@@ -341,7 +342,7 @@ func (obj *CommonHWHandler) registerAndWaitAUXDone() error {
 
 }
 
-func (obj *CommonHWHandler) GetChipMode() (ChipMode, error) {
+func (obj *HWHandler) GetMode() (hal.ChipMode, error) {
 	m0Val, err := obj.M0Line.Value()
 	if err != nil {
 		return 0, fmt.Errorf("failed to get M0 line value, err: %w", err)
@@ -359,6 +360,8 @@ func (obj *CommonHWHandler) GetChipMode() (ChipMode, error) {
 	return 0, fmt.Errorf("chip is in some weird undefined mode. Check connection")
 }
 
-func (obj *CommonHWHandler) setAuxAction(action auxAction) {
+func (obj *HWHandler) setAuxAction(action int32) {
+	atomic.StoreInt32(&obj.auxAction, action)
+
 	obj.auxAction = action
 }

@@ -6,6 +6,19 @@ import (
 
 type registersCollection [8]hal.Register
 
+func newRegistersCollection() registersCollection {
+	return registersCollection{
+		&AddH{},
+		&AddL{},
+		&Reg0{},
+		&Reg1{},
+		&Reg2{},
+		&Reg3{},
+		&CryptH{},
+		&CryptL{},
+	}
+}
+
 func (obj registersCollection) EqualTo(c registersCollection) bool {
 	if len(obj) != len(c) {
 		return false
@@ -27,16 +40,9 @@ func (obj registersCollection) Copy() registersCollection {
 	return newCollection
 }
 
-func newRegistersCollection() registersCollection {
-	return registersCollection{
-		&AddH{},
-		&AddL{},
-		&Reg0{},
-		&Reg1{},
-		&Reg2{},
-		&Reg3{},
-		&CryptH{},
-		&CryptL{},
+func (obj registersCollection) Update(startAddr byte, params []byte) {
+	for i := 0; i < len(params); i++ {
+		obj[int(startAddr)+i].SetValue(params[i])
 	}
 }
 

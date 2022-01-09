@@ -1,34 +1,3 @@
-# go-ebyte-lora
-EBYTE E22 (for now) interface library for Linux, Raspberry PI, written in Go. 
-
-Experimental phase
-
-WARNING: 
-* It was tested on Raspberry Pi 4 Model B, kernel 5.10
-* There is possibility that this lib will not work on a lower kernel versions, beacuse it is based on Go gpiod library that needs kernel 5.10+ for HW interrupt handling
-* Experimental phase
-* E22 EBYTE modules should work with this library
-* E32 support will be added
-* There is still no documentation, just a several comments
-
-How to connect:
-- `RX -> RPI TX`
-- `TX -> RPI RX`
-- `AUX -> GPIO 25`
-- `M0 -> GPIO 23`
-- `M1 -> GPIO 24`
-- `VCC -> RPI 5V`
-- `GND -> RPI GND`
-
-
-E22 Example:
-
-EBYTE E22 chip family should be fully supported by this library.
-
-* Library is tested on E220-900T30D module, and the module documentation can be found here:
-  * https://www.ebyte.com/en/downpdf.aspx?id=1214
-
-```Go
 package main
 
 import (
@@ -105,4 +74,3 @@ func main() {
 	}
 
 }
-```

@@ -17,7 +17,7 @@ type HWHandler interface {
 	ReadSerial() ([]byte, error)
 	WriteSerial(msg []byte) error
 	StageSerialPortConfig(baudRate int, parityBit serial.Parity)
-	SetChipMode(mode ChipMode) error
-	GetChipMode() (ChipMode, error)
+	SetMode(mode ChipMode) error
+	GetMode() (ChipMode, error)
 	RegisterOnMessageCb(OnMessageCb) error
 }

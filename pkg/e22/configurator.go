@@ -1,11 +1,11 @@
 package e22
 
 type ConfigBuilder struct {
-	chip            *Chip
+	chip            *Module
 	stagedRegisters registersCollection
 }
 
-func NewConfigUpdateBuilder(chip *Chip) *ConfigBuilder {
+func NewConfigBuilder(chip *Module) *ConfigBuilder {
 	return &ConfigBuilder{
 		chip:            chip,
 		stagedRegisters: chip.registers.Copy(), // copy current values
