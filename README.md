@@ -1,17 +1,16 @@
 # go-ebyte-lora
-EBYTE E22 (for now) interface library for Linux, Raspberry PI, written in Go.
+EBYTE interface library for Linux, Raspberry PI, written in Go.
 
-Experimental phase
+Alpha
 
 WARNING:
-* It was tested on Raspberry Pi 4 Model B, kernel 5.5
-* There is possibility that this lib will not work on a lower kernel versions, because it is based on Go gpiod library that needs kernel 5.5+ for HW interrupt handling
-* Experimental phase
-* E22 EBYTE modules should work with this library
+* Tested on Raspberry Pi 4 Model B, kernel 5.5+
+* There is possibility that this lib will not work on a lower kernel versions, because it is based on Go gpiod library that needs kernel 5.5+ for proper HW interrupt handling
+* Lib is stil in experimental phase. There is no documentation and tests, for now. 
+* E22 EBYTE modules should be fully supported
 * E32 support will be added
-* There is still no documentation, just a several comments
 
-How to connect:
+How to connect E22 module to RPi:
 - `RX -> RPI TX`
 - `TX -> RPI RX`
 - `AUX -> GPIO 25`
@@ -65,21 +64,20 @@ func main() {
 	}
 
 	// create E22 module handler
-	// when creating a new module, config parameters from E22 module are read, and synchronized with the local registers model
+	// when creating a new module, current configuration that is stored on E22 module is fetched, and synchronized with the local registers model
 	module, err := e22.NewModule(hw, messageEvent)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// E22 operating mode must be explicitly defined after initialization
-	hw.SetMode(hal.ModeNormal)
+	hw.SetMode(hal.ModeNormal) // E22 operating mode must be explicitly defined after initialization
 
 	// print current configuration
 	log.Println(module.GetModuleConfiguration())
 
 	// ConfigBuilder is used to create a new module config
 	// enable RSSI info in received messages
-	// in this example only RSSIState flag is updated, and nothing else. All other registers values ​​are preserved.
+	// in this example only RSSIState flag is updated, and nothing else. All other registers values are preserved.
 	cb := e22.NewConfigBuilder(module).RSSIState(e22.RSSI_ENABLE)
 	err = cb.WritePermanentConfig() // update registers on the module with the new data
 	if err != nil {
@@ -89,7 +87,7 @@ func main() {
 		log.Println(module.GetModuleConfiguration())
 	}
 
-	// send some message, and expect response in `messageEvent` func`
+	// send some message to Lora EBYTE receiver, and expect response in `messageEvent`  callback function
 	err = module.SendMessage("ASTATUS")
 	if err != nil {
 		log.Printf("failed to send data: %s", err)
