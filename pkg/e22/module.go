@@ -10,11 +10,13 @@ import (
 	"github.com/tarm/serial"
 )
 
+// Message struct that holds received data
 type Message struct {
 	Payload []byte
 	RSSI    uint8
 }
 
+// OnMessageCb defines on message callback type
 type OnMessageCb func(Message, error)
 
 const (
@@ -23,6 +25,7 @@ const (
 	cmdSetRegTemporary byte = 0xC2
 )
 
+// chipRsp defines module response structure
 type chipRsp struct {
 	command   byte
 	startAddr byte
@@ -47,12 +50,14 @@ var serialParityMap = map[parity]serial.Parity{
 	PARITY_8E1: serial.ParityEven,
 }
 
+// Module E22 module object
 type Module struct {
 	registers registersCollection
 	hw        hal.HWHandler
 	onMsgCb   OnMessageCb
 }
 
+// NewModule constract new E22 module, reads current configuration and sets chip mode
 func NewModule(gpioHandler hal.HWHandler, cb OnMessageCb) (*Module, error) {
 	mode, err := gpioHandler.GetMode()
 	if err != nil {
@@ -87,6 +92,7 @@ func NewModule(gpioHandler hal.HWHandler, cb OnMessageCb) (*Module, error) {
 	return ch, err
 }
 
+// onMessageHandler parses received message and construct human readable message
 func (obj *Module) onMessageHandler(msg []byte, err error) {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -112,6 +118,7 @@ func (obj *Module) onMessageHandler(msg []byte, err error) {
 	obj.onMsgCb(Message{Payload: msg, RSSI: 0}, err)
 }
 
+// readChipRegisters reads all the registers on the chip
 func (obj *Module) readChipRegisters(startingAddress hal.RegAddress, length uint8) (data []byte, err error) {
 
 	err = obj.hw.SetMode(hal.ModeSleep)
@@ -131,6 +138,7 @@ func (obj *Module) readChipRegisters(startingAddress hal.RegAddress, length uint
 	return
 }
 
+// saveConfig updates lib internal cache with the real registers values on the module
 func (obj *Module) saveConfig(data []byte) error {
 
 	rsp, err := obj.parseChipResponse(data)
@@ -141,6 +149,9 @@ func (obj *Module) saveConfig(data []byte) error {
 	return nil
 }
 
+// getConfigSetRequest returns byte array that holds registers data that must be set
+// temporary construct temporary config that will be reset after chip reboot
+// registers collection of register values that must be set on real module
 func (obj *Module) getConfigSetRequest(temporary bool, registers registersCollection) []byte {
 
 	params := registers[0:]
@@ -166,6 +177,8 @@ func (obj *Module) getConfigSetRequest(temporary bool, registers registersCollec
 	return data
 }
 
+// parseChipResponse when the module is in config mode, it returns response that must be parsed, read datasheet
+// returns new chipRsp object that holds parsed data
 func (obj *Module) parseChipResponse(data []byte) (chipRsp, error) {
 
 	if len(data) < 4 {
@@ -186,6 +199,8 @@ func (obj *Module) parseChipResponse(data []byte) (chipRsp, error) {
 	}, nil
 }
 
+// updateSerialStreamConfig if the serial config that is stored on the module is different than current one,
+// update serial config data
 func (obj *Module) updateSerialStreamConfig() error {
 	// get chip serial config and apply it to the serial port handler
 	reg0 := obj.registers[REG0].(*Reg0)
@@ -195,6 +210,7 @@ func (obj *Module) updateSerialStreamConfig() error {
 	return nil
 }
 
+// WriteConfigToChip writes given config to module
 func (obj *Module) WriteConfigToChip(temporaryConfig bool, stagedRegisters registersCollection) error {
 	if stagedRegisters.EqualTo(obj.registers) {
 		return fmt.Errorf("new register setup is the same as the setup on the chip, ignoring")
@@ -238,6 +254,7 @@ func (obj *Module) WriteConfigToChip(temporaryConfig bool, stagedRegisters regis
 	return nil
 }
 
+// SendMessage sends given message to module via UART
 func (obj *Module) SendMessage(message string) error {
 	currentMode, err := obj.hw.GetMode()
 	if err != nil {
@@ -253,6 +270,7 @@ func (obj *Module) SendMessage(message string) error {
 	return nil
 }
 
+// SendFixedMessage if you want to send message to some fixed address and channel, use this method
 func (obj *Module) SendFixedMessage(addressHigh byte, addressLow byte, channel byte, message string) error {
 	currentMode, err := obj.hw.GetMode()
 	if err != nil {
@@ -274,6 +292,7 @@ func (obj *Module) SendFixedMessage(addressHigh byte, addressLow byte, channel b
 	return nil
 }
 
+// GetModuleConfiguration returns human readable current module configuration
 func (obj *Module) GetModuleConfiguration() string {
 	var conf string
 	for _, reg := range obj.registers {

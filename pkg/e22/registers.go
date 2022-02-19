@@ -4,8 +4,10 @@ import (
 	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
 )
 
+// registersCollection collection of the registers that exist on the module
 type registersCollection [8]hal.Register
 
+// newRegistersCollection constructs new register collection
 func newRegistersCollection() registersCollection {
 	return registersCollection{
 		&AddH{},
@@ -19,6 +21,7 @@ func newRegistersCollection() registersCollection {
 	}
 }
 
+// EqualTo compares current regs collection with the given collection
 func (obj registersCollection) EqualTo(c registersCollection) bool {
 	if len(obj) != len(c) {
 		return false
@@ -31,6 +34,7 @@ func (obj registersCollection) EqualTo(c registersCollection) bool {
 	return true
 }
 
+// Copy returns a copy of the current register collection
 func (obj registersCollection) Copy() registersCollection {
 	newCollection := newRegistersCollection()
 
@@ -40,6 +44,9 @@ func (obj registersCollection) Copy() registersCollection {
 	return newCollection
 }
 
+// Update updates register collection
+// startAddr address from where we want to update register collection
+// params-> new values that are set to registers
 func (obj registersCollection) Update(startAddr byte, params []byte) {
 	for i := 0; i < len(params); i++ {
 		obj[int(startAddr)+i].SetValue(params[i])
@@ -57,8 +64,8 @@ const (
 	CRYPT_L
 )
 
+// if you want to know what registers represent, read module datasheet
 // ADD_H specification
-
 type AddH struct {
 	address uint8
 }
@@ -76,7 +83,6 @@ func (obj *AddH) SetValue(value uint8) {
 }
 
 // ADD_L specification
-
 type AddL struct {
 	address uint8
 }
@@ -94,7 +100,6 @@ func (obj *AddL) SetValue(value uint8) {
 }
 
 // REG0 specification
-
 type baudRate uint8
 
 const (
@@ -150,7 +155,6 @@ func (obj *Reg0) SetValue(value uint8) {
 }
 
 // REG1 specification
-
 type subPacket uint8
 
 const (
@@ -197,7 +201,6 @@ func (obj *Reg1) SetValue(value uint8) {
 }
 
 // REG2 specification
-
 // Actual frequency = 850.125 + CH *1M
 type Reg2 struct {
 	channel uint8 // 0-80 channels
@@ -219,7 +222,6 @@ func (obj *Reg2) SetValue(value uint8) {
 }
 
 // REG3 specification
-
 type enableRSSI uint8
 
 const (
@@ -277,7 +279,6 @@ func (obj *Reg3) SetValue(value uint8) {
 }
 
 // CRYPT_H specification
-
 type CryptH struct {
 	value uint8
 }
@@ -295,7 +296,6 @@ func (obj *CryptH) SetValue(value uint8) {
 }
 
 // CRYPT_L specification
-
 type CryptL struct {
 	value uint8
 }

@@ -19,11 +19,13 @@ const (
 	actionModeSwitch
 )
 
+// chipModeLineState chip mode is defined by two, M0 and M1 inputs. FOr more info read chip doc
 type chipModeLineState struct {
 	m0Value int
 	m1Value int
 }
 
+// chipModes chip modes defined by the documentations
 var chipModes = map[hal.ChipMode]*chipModeLineState{
 	hal.ModeNormal:    {m0Value: 0, m1Value: 0},
 	hal.ModeWakeUp:    {m0Value: 1, m1Value: 0},
@@ -31,6 +33,7 @@ var chipModes = map[hal.ChipMode]*chipModeLineState{
 	hal.ModeSleep:     {m0Value: 1, m1Value: 1},
 }
 
+// serialPortData struct that holds data needed to configure serial port
 type serialPortData struct {
 	serialBaud            int
 	serialParityBit       serial.Parity
@@ -38,6 +41,7 @@ type serialPortData struct {
 	serialParityBitStaged serial.Parity
 }
 
+// HWHandler data structure
 type HWHandler struct {
 	tty              string                // serial port name
 	serialPortData   *serialPortData       // serial port config data
@@ -55,6 +59,7 @@ type HWHandler struct {
 	onMsgCb          hal.OnMessageCb
 }
 
+// NewHWHandler constructs new hardware handler -> handler that is used to communicate and control eByte lora module
 func NewHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip string) (*HWHandler, error) {
 	handler := &HWHandler{
 		tty: ttyName,
@@ -104,6 +109,7 @@ func NewHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip str
 	return handler, nil
 }
 
+// Close cleans and closes GPIOs and serial port
 func (obj *HWHandler) Close() (err error) {
 	err = obj.M0Line.Close()
 	if err != nil {
@@ -125,6 +131,7 @@ func (obj *HWHandler) Close() (err error) {
 	return nil
 }
 
+// RegisterOnMessageCb registers callback method that is called every time when a new message is received
 func (obj *HWHandler) RegisterOnMessageCb(cb hal.OnMessageCb) error {
 	if obj.onMsgCb != nil {
 		return fmt.Errorf("on message callback already registered")
@@ -133,11 +140,16 @@ func (obj *HWHandler) RegisterOnMessageCb(cb hal.OnMessageCb) error {
 	return nil
 }
 
+// StageSerialPortConfig set config parameters that will be applied on next updateSerialConfig update
+// there are cases when they can't be applied directly, so we need to stage it first and apply later
 func (obj *HWHandler) StageSerialPortConfig(baudRate int, parityBit serial.Parity) {
 	obj.serialPortData.serialBaudStaged = baudRate
 	obj.serialPortData.serialParityBitStaged = parityBit
 }
 
+// updateSerialConfig updates RPi serial port config depending on the parameters that are stored on the module
+// at initialization this lib uses baud 9600 to read stored configuration on the module, and if serial config is different than initial one,
+// serial config must be initialized again with the new parameters
 func (obj *HWHandler) updateSerialConfig(serialPortData *serialPortData) (err error) {
 
 	// ignore updating if current and next config is the same
@@ -177,11 +189,13 @@ func (obj *HWHandler) updateSerialConfig(serialPortData *serialPortData) (err er
 	return nil
 }
 
+// onAuxPinRiseEvent on aux pin rising edge interrupt handler
 func (obj *HWHandler) onAuxPinRiseEvent(evt gpiod.LineEvent) {
 	// there is a case when we want to write something to serial or switch chip mode, but the module is busy with reading
 	// on aux rising edge, module is not busy, and operations that wait can be executed
 	defer obj.auxDoneNotifyReceivers()
 
+	// since it is possible to get N interrupts one after another, perform atomic reading
 	currentAction := atomic.LoadInt32(&obj.auxAction)
 	if currentAction == actionModeSwitch {
 		obj.setAuxAction(actionRead)
@@ -202,6 +216,7 @@ func (obj *HWHandler) onAuxPinRiseEvent(evt gpiod.LineEvent) {
 	}
 }
 
+// ReadSerial reads data from the internal buffer register on the module
 func (obj *HWHandler) ReadSerial() ([]byte, error) {
 	// read all buffered data, before new read can be performed
 	obj.muRead.Lock()
@@ -215,6 +230,7 @@ func (obj *HWHandler) ReadSerial() ([]byte, error) {
 	return buf[:n], nil
 }
 
+// WriteSerial writes given byte array to serial port
 func (obj *HWHandler) WriteSerial(msg []byte) error {
 	// lock it, another write or mode switch can't happen before this writing finishes
 	obj.muBusy.Lock()
@@ -243,6 +259,7 @@ func (obj *HWHandler) WriteSerial(msg []byte) error {
 	return nil
 }
 
+// SetMode sets ebyte module to given mode
 func (obj *HWHandler) SetMode(mode hal.ChipMode) error {
 	// lock it, another write or mode switch can't happen before this mode switching finishes
 	currentMode, err := obj.GetMode()
@@ -305,6 +322,7 @@ func (obj *HWHandler) SetMode(mode hal.ChipMode) error {
 	return nil
 }
 
+// auxDoneNotifyReceivers notifies all receivers that are waiting for aux done on raising edge
 func (obj *HWHandler) auxDoneNotifyReceivers() {
 	obj.muAuxDone.Lock()
 	defer obj.muAuxDone.Unlock()
@@ -316,6 +334,7 @@ func (obj *HWHandler) auxDoneNotifyReceivers() {
 
 }
 
+// registerAndWaitAUXDone adds new aux done listener to aux busy group
 func (obj *HWHandler) registerAndWaitAUXDone() error {
 	val, err := obj.AUXLine.Value()
 	if err != nil {
@@ -342,6 +361,7 @@ func (obj *HWHandler) registerAndWaitAUXDone() error {
 
 }
 
+// GetMode returns current module mode, depending on M0,M! GPIO input state
 func (obj *HWHandler) GetMode() (hal.ChipMode, error) {
 	m0Val, err := obj.M0Line.Value()
 	if err != nil {
@@ -360,8 +380,8 @@ func (obj *HWHandler) GetMode() (hal.ChipMode, error) {
 	return 0, fmt.Errorf("chip is in some weird undefined mode. Check connection")
 }
 
+// setAuxAction sets given action read/write/modeSwitch as a next action that will be performed on aux event
 func (obj *HWHandler) setAuxAction(action int32) {
 	atomic.StoreInt32(&obj.auxAction, action)
-
 	obj.auxAction = action
 }
