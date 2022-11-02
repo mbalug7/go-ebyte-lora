@@ -1,6 +1,6 @@
 {
     "name": "golang dev container",
-    "image": "mcr.microsoft.com/vscode/devcontainers/go:1.16",
+    "image": "mcr.microsoft.com/vscode/devcontainers/go:1.19",
     "postCreateCommand": "go mod download",
     "settings": {
         "go.useLanguageServer": true

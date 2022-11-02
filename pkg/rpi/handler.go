@@ -1,4 +1,6 @@
-package common
+// +build linux
+
+package rpi
 
 import (
 	"fmt"
@@ -36,9 +38,9 @@ var chipModes = map[hal.ChipMode]*chipModeLineState{
 // serialPortData struct that holds data needed to configure serial port
 type serialPortData struct {
 	serialBaud            int
-	serialParityBit       serial.Parity
+	serialParityBit       hal.Parity
 	serialBaudStaged      int
-	serialParityBitStaged serial.Parity
+	serialParityBitStaged hal.Parity
 }
 
 // HWHandler data structure
@@ -65,9 +67,9 @@ func NewHWHandler(M0Pin int, M1Pin int, AUXPin int, ttyName string, gpioChip str
 		tty: ttyName,
 		serialPortData: &serialPortData{
 			serialBaud:            9600,
-			serialParityBit:       serial.ParityNone,
+			serialParityBit:       hal.ParityNone,
 			serialBaudStaged:      9600,
-			serialParityBitStaged: serial.ParityNone,
+			serialParityBitStaged: hal.ParityNone,
 		},
 		auxBusyWaitGroup: make(map[string]chan error),
 		writeDone:        make(chan bool, 1),
@@ -142,7 +144,7 @@ func (obj *HWHandler) RegisterOnMessageCb(cb hal.OnMessageCb) error {
 
 // StageSerialPortConfig set config parameters that will be applied on next updateSerialConfig update
 // there are cases when they can't be applied directly, so we need to stage it first and apply later
-func (obj *HWHandler) StageSerialPortConfig(baudRate int, parityBit serial.Parity) {
+func (obj *HWHandler) StageSerialPortConfig(baudRate int, parityBit hal.Parity) {
 	obj.serialPortData.serialBaudStaged = baudRate
 	obj.serialPortData.serialParityBitStaged = parityBit
 }
@@ -178,7 +180,7 @@ func (obj *HWHandler) updateSerialConfig(serialPortData *serialPortData) (err er
 		Baud:        serialPortData.serialBaudStaged,
 		Size:        8,
 		ReadTimeout: 2 * time.Second,
-		Parity:      serialPortData.serialParityBitStaged,
+		Parity:      serial.Parity(serialPortData.serialParityBitStaged),
 	}
 	obj.serialStream, err = serial.OpenPort(config)
 	if err != nil {
@@ -281,7 +283,7 @@ func (obj *HWHandler) SetMode(mode hal.ChipMode) error {
 			serialBaud:            obj.serialPortData.serialBaud,
 			serialParityBit:       obj.serialPortData.serialParityBit,
 			serialBaudStaged:      9600,
-			serialParityBitStaged: serial.ParityNone,
+			serialParityBitStaged: hal.ParityNone,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to setup serial port params for sleep mode, err: %w", err)

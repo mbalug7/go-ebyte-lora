@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
-	"github.com/tarm/serial"
 )
 
 // Message struct that holds received data
@@ -44,10 +43,10 @@ var serialBaudMap = map[baudRate]int{
 	BAUD_115200: 115200,
 }
 
-var serialParityMap = map[parity]serial.Parity{
-	PARITY_8N1: serial.ParityNone,
-	PARITY_8O1: serial.ParityOdd,
-	PARITY_8E1: serial.ParityEven,
+var serialParityMap = map[parity]hal.Parity{
+	PARITY_8N1: hal.ParityNone,
+	PARITY_8O1: hal.ParityOdd,
+	PARITY_8E1: hal.ParityEven,
 }
 
 // Module E22 module object
@@ -185,16 +184,21 @@ func (obj *Module) parseChipResponse(data []byte) (chipRsp, error) {
 		return chipRsp{}, fmt.Errorf("invalid command")
 	}
 	startAddr := data[1]
-	length := data[2]
+	paramsNumber := data[2]
 	params := data[3:]
 
-	if int(length) != len(params) {
-		return chipRsp{}, fmt.Errorf("invalid command, mismatch in length and params count")
+	// if some random data are received after actual message, remove them
+	if int(paramsNumber) > 0 {
+		params = params[:paramsNumber]
+	}
+
+	if int(paramsNumber) != len(params) {
+		return chipRsp{}, fmt.Errorf("invalid command, mismatch in length and params count, %x", data)
 	}
 	return chipRsp{
 		command:   cmdGetReg,
 		startAddr: startAddr,
-		length:    length,
+		length:    paramsNumber,
 		params:    params,
 	}, nil
 }

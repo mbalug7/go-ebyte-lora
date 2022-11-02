@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/mbalug7/go-ebyte-lora/pkg/common"
 	"github.com/mbalug7/go-ebyte-lora/pkg/e22"
 	"github.com/mbalug7/go-ebyte-lora/pkg/hal"
+	"github.com/mbalug7/go-ebyte-lora/pkg/rpi"
 )
 
 // messageEvent callback method that is called when new message is received
@@ -28,7 +28,7 @@ func main() {
 	// AUX -> GPIO 25
 	// /dev/ttyS0 -> RPi 4 serial
 	// gpiochip0 -> RPi4 GPIO chip name, 5.5+ Linux kernel needed
-	hw, err := common.NewHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0")
+	hw, err := rpi.NewHWHandler(23, 24, 25, "/dev/ttyS0", "gpiochip0")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,7 +49,16 @@ func main() {
 	// ConfigBuilder is used to create a new module config
 	// enable RSSI info in received messages
 	// in this example only RSSIState flag is updated, and nothing else. All other registers values ​​are preserved.
-	cb := e22.NewConfigBuilder(module).RSSIState(e22.RSSI_ENABLE)
+	// cb := e22.NewConfigBuilder(module).RSSIState(e22.RSSI_ENABLE)
+	// err = cb.WritePermanentConfig() // update registers on the module with the new data
+	// if err != nil {
+	// 	// log write error
+	// 	log.Printf("config write error: %s", err)
+	// } else {
+	// }
+	log.Println(module.GetModuleConfiguration())
+
+	cb := e22.NewConfigBuilder(module).RSSIState(e22.RSSI_DISABLE).Address(0, 3).Channel(23).AirDataRate(e22.ADR_2400).TransmissionMethod(e22.TRANSMISSION_FIXED)
 	err = cb.WritePermanentConfig() // update registers on the module with the new data
 	if err != nil {
 		// log write error
