@@ -269,7 +269,7 @@ func (obj *Module) SendMessage(message string) error {
 	}
 	err = obj.hw.WriteSerial([]byte(message))
 	if err != nil {
-		return fmt.Errorf("failed to write config to the chip: %w", err)
+		return fmt.Errorf("failed to write message to serial port: %w", err)
 	}
 	return nil
 }
